@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Thu Apr 12 23:14:06 2018
@@ -15,18 +16,24 @@ def create_pool(loop,**kw):
     logging.info('create database connection pool...')
     global __pool
     __pool = yield from aiomysql.create_pool(
-            host = kw.get('host','localhost'),
-            port = kw.get('port',3306),
-            user = kw['user'],
-            password = kw['password'],
-            db = kw['db'],
-            charset = kw.get('charset','utf-8'),
-            autocommit = kw.get('autocommit',True),
-            maxsize = kw.get('maxsize',10),
-            minsize = kw.get('minsize',1),
-            loop = loop
-            )
-
+        host=kw.get('host', 'localhost'),
+#        host=kw.get('host', '127.0.0.1'),
+        port=kw.get('port', 3306),
+        user=kw['user'],
+        password=kw['password'],
+        db=kw['db'],
+        charset=kw.get('charset', 'utf8'),
+        autocommit=kw.get('autocommit', True),
+        maxsize=kw.get('maxsize', 10),
+        minsize=kw.get('minsize', 1),
+        loop=loop
+    )
+@asyncio.coroutine
+def destory_pool():
+    global __pool
+    if __pool is not None :
+        __pool.close()
+        yield from __pool.wait_closed()
 @asyncio.coroutine
 def select(sql,args,size=None):
     log(sql,args)
@@ -43,15 +50,21 @@ def select(sql,args,size=None):
         return rs
 
 @asyncio.coroutine
-def execute(sql,args):
+def execute(sql, args, autocommit=True):
     log(sql)
     with (yield from __pool) as conn:
+        if not autocommit:
+            yield from conn.begin()
         try:
-            cur = yield from conn.curosr()
-            yield from cur.execute(sql.replace('?','%s'),args)
+            cur = yield from conn.cursor()
+            yield from cur.execute(sql.replace('?', '%s'), args)
             affected = cur.rowcount
             yield from cur.close()
+            if not autocommit:
+                yield from conn.commit()
         except BaseException as e:
+            if not autocommit:
+                yield from conn.rollback()
             raise
         return affected
 def create_args_string(num):
@@ -114,8 +127,8 @@ class ModelMetaclass(type):
             raise RuntimeError('primary key is not found')
         for k in mappings.keys():
             attrs.pop(k)
-        escaped_fields = list(map(lambda f: '`%s`' % f),fields)
-        attrs['__mappings__'] =  mappings
+        escaped_fields = list(map(lambda f: '`%s`' % f, fields))
+        attrs['__mappings__'] = mappings # 保存属性和列的映射关系
         attrs['__table__'] = tableName
         attrs['__primary_key__'] = primaryKey
         attrs['__fields__'] = fields
@@ -154,7 +167,8 @@ class Model(dict,metaclass=ModelMetaclass):
         return value
     
     @classmethod
-    async def findAll(cls,where=None,args=None,**kw):
+    @asyncio.coroutine
+    def findAll(cls,where=None,args=None,**kw):
         'find objects by where clause'
         sql = [cls.__select__]
         if where:
@@ -180,7 +194,8 @@ class Model(dict,metaclass=ModelMetaclass):
         rs = yield from select(' '.join(sql),args)
         return [cls(**r) for r in rs]
     @classmethod
-    async def findNumber(cls, selectField, where=None, args=None):
+    @asyncio.coroutine
+    def findNumber(cls, selectField, where=None, args=None):
         ' find number by select and where. '
         sql = ['select %s _num_ from `%s`' % (selectField, cls.__table__)]
         if where:
@@ -199,34 +214,27 @@ class Model(dict,metaclass=ModelMetaclass):
         if len(rs) == 0:
             return None
         return cls(**rs[0])
-    async def save(self):
+    @asyncio.coroutine
+    def save(self):
         args = list(map(self.getValueOrDefault,self.__fields__))
         args.append(self.getValueOrDefault(self.__primary_key__))
         rows = yield from execute(self.__insert__,args)
         if rows != 1:
             logging.warn('failed to insert record: affected rows: %s' % rows)
-    async def update(self):
+    @asyncio.coroutine
+    def update(self):
         args = list(map(self.getValue, self.__fields__))
         args.append(self.getValue(self.__primary_key__))
         rows = yield from execute(self.__update__, args)
         if rows != 1:
             logging.warn('failed to update by primary key: affected rows: %s' % rows)        
-    async def remove(self):
+    @asyncio.coroutine
+    def remove(self):
         args = [self.getValue(self.__primary_key__)]
         rows = yield from execute(self.__delete__,args)
         if rows != 1:
             logging.warn('failed to remove by primary key: affected rows: %s' % rows)        
         
-
-
-
-
-
-class User(Model):
-    __table__ = 'users'
-    
-    id = IntegerField(primary_key=True)
-    name = StringField()
 
 
 
