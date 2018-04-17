@@ -11,8 +11,10 @@ import asyncio, os, json, time
 from datetime import datetime
 from aiohttp import web
 from jinja2 import Environment, FileSystemLoader
+
+from config import configs
 import orm
-from corowb import add_routes, add_static
+from coroweb import add_routes, add_static
 
 def init_jinja2(app,**kw):
     logging.info('init jinja2...')
@@ -20,9 +22,9 @@ def init_jinja2(app,**kw):
             autoescape = kw.get('autoescape',True),
             block_start_string = kw.get('block_start_string','{%'),
             block_end_string = kw.get('block_end_string','%}'),
-            variable_start_string = kw.get('variable_start_string','{{')
-            variable_end_string = kw.get('variable_end_string','}}')
-            auto_reload = kw.get('auto_reload',True)
+            variable_start_string = kw.get('variable_start_string','{{'),
+            variable_end_string = kw.get('variable_end_string','}}'),
+            auto_reload = kw.get('auto_reload',True),
             )
     path = kw.get('path',None)
     if path is None:
@@ -101,17 +103,18 @@ def datetime_filter(t):
         return u'%s天前' % (delta // 86400)
     dt = datetime.fromtimestamp(t)
     return u'%s年%s月%s日' % (dt.year,dt.month,dt.day)    
-
-async def init(loop):
-    await orm.create_pool(loop=loop,host='127.0.0.1',port=3306,user='www',password='www'，db='awesome')
+@asyncio.coroutine
+def init(loop):
+#    yield from orm.create_pool(loop=loop,host='127.0.0.1',port=3306,user='www',password='www',db='awesome')
+    yield from orm.create_pool(loop=loop,**configs['db'])
     app = web.Application(loop=loop,middlewares=[
-            logger_fatory, response_factory
+            logger_factory, response_factory
             ])
     init_jinja2(app,filters=dict(datetime=datetime_filter))
     add_routes(app,'handlers')
     add_static(app)
-    srv = await loop.create_server(app.make_handler(),'127.0.0.1',9000)
-    logging.info('server started at http://127.0.0.1:9000...')
+    srv = yield from loop.create_server(app.make_handler(),'127.0.0.1',9003)
+    logging.info('server started at http://127.0.0.1:9003...')
     return srv
 
 loop = asyncio.get_event_loop()
