@@ -6,6 +6,19 @@ Created on Tue Apr 17 19:47:46 2018
 """
 import config_default
 
+class Dict(dict):
+    '''
+    simple dict but support access as x.y style
+    '''
+    def __init__(self,**kw):
+        super(Dict,self).__init__(**kw)
+    def __getattr__(self,key):
+        try:
+            return self[key]
+        except KeyError:
+            raise
+    def __setattr__(self,k,v):
+            self[k] = v
 
 def merge(d0,d1):
     d=d0
@@ -24,3 +37,5 @@ try:
     configs = merge(configs,config_override.configs)
 except ImportError:
     pass
+
+configs = Dict(**configs)

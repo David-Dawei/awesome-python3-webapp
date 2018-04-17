@@ -108,16 +108,16 @@ def datetime_filter(t):
 @asyncio.coroutine
 def init(loop):
 #    yield from orm.create_pool(loop=loop,host='127.0.0.1',port=3306,user='www',password='www',db='awesome')
-    yield from orm.create_pool(loop=loop,**configs['db'])
-#    yield from orm.create_pool(loop=loop,**configs.db)
+#    yield from orm.create_pool(loop=loop,**configs['db'])
+    yield from orm.create_pool(loop=loop,**configs.db)
     app = web.Application(loop=loop,middlewares=[
             logger_factory, response_factory
             ])
     init_jinja2(app,filters=dict(datetime=datetime_filter))
     add_routes(app,'handlers')
     add_static(app)
-    srv = yield from loop.create_server(app.make_handler(),'127.0.0.1',9009)
-    logging.info('server started at http://127.0.0.1:9009...')
+    srv = yield from loop.create_server(app.make_handler(),'127.0.0.1',9003)
+    logging.info('server started at http://127.0.0.1:9003...')
     return srv
 
 loop = asyncio.get_event_loop()
