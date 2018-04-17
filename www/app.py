@@ -71,11 +71,13 @@ async def response_factory(app,handler):
             return resp
         if isinstance(r,dict):
             template = r.get('__template__')
+            logging.info('run to response -> dict branch')
             if template is None:
                 resp = web.Response(body=json.dumps(r,ensure_ascii=False,default=lambda o:o.__dict__).encode('utf-8'))
                 resp.content_type = 'application/json;charset=utf-8'
                 return resp
             else:
+#                r['__user__'] = request.__user__
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
                 resp.content_type = 'text/html;charset=utf-8'
                 return resp
@@ -94,7 +96,7 @@ async def response_factory(app,handler):
 def datetime_filter(t):
     delta = int(time.time() - t)
     if delta < 60:
-        return r'1分钟前'
+        return u'1分钟前'
     if delta < 3600:
         return u'%s分钟前' % (delta // 60)
     if delta < 86400:
@@ -107,14 +109,15 @@ def datetime_filter(t):
 def init(loop):
 #    yield from orm.create_pool(loop=loop,host='127.0.0.1',port=3306,user='www',password='www',db='awesome')
     yield from orm.create_pool(loop=loop,**configs['db'])
+#    yield from orm.create_pool(loop=loop,**configs.db)
     app = web.Application(loop=loop,middlewares=[
             logger_factory, response_factory
             ])
     init_jinja2(app,filters=dict(datetime=datetime_filter))
     add_routes(app,'handlers')
     add_static(app)
-    srv = yield from loop.create_server(app.make_handler(),'127.0.0.1',9003)
-    logging.info('server started at http://127.0.0.1:9003...')
+    srv = yield from loop.create_server(app.make_handler(),'127.0.0.1',9009)
+    logging.info('server started at http://127.0.0.1:9009...')
     return srv
 
 loop = asyncio.get_event_loop()
