@@ -15,6 +15,7 @@ from jinja2 import Environment, FileSystemLoader
 from config import configs
 import orm
 from coroweb import add_routes, add_static
+from handlers import cookie2user,COOKIE_NAME
 
 def init_jinja2(app,**kw):
     logging.info('init jinja2...')
@@ -42,6 +43,22 @@ async def logger_factory(app,handler):
         logging.info('Request: %s %s' %(request.method,request.path))
         return (await handler(request))
     return logger
+
+@asyncio.coroutine
+def auth_factory(app,handler):
+    @asyncio.coroutine
+    def auth(request):
+        logging.info('check user: %s %s' % (request.method,request.path))
+        request.__user__ = None
+        cookie_str = request.cookies.get(COOKIE_NAME)
+        if cookie_str:
+            user = yield from cookie2user(cookie_str)
+            if user:
+                logging.info('set current user: %s' % user.email)
+                request.__user__ = user
+        return (yield from handler(request))
+    return auth
+
 async def data_factory(app, handler):
     async def parse_data(request):
         if request.method == 'POST':
@@ -53,6 +70,7 @@ async def data_factory(app, handler):
                 logging.info('request form: %s' % str(request.__data__))
         return (await handler(request))
     return parse_data
+
 async def response_factory(app,handler):
     async def response(request):
         logging.info('Response handler')
@@ -93,6 +111,11 @@ async def response_factory(app,handler):
         return resp
     return response
 
+
+
+
+
+
 def datetime_filter(t):
     delta = int(time.time() - t)
     if delta < 60:
@@ -111,7 +134,7 @@ def init(loop):
 #    yield from orm.create_pool(loop=loop,**configs['db'])
     yield from orm.create_pool(loop=loop,**configs.db)
     app = web.Application(loop=loop,middlewares=[
-            logger_factory, response_factory
+            logger_factory, response_factory,auth_factory,
             ])
     init_jinja2(app,filters=dict(datetime=datetime_filter))
     add_routes(app,'handlers')
